@@ -1,0 +1,205 @@
+{
+  "dataset": "wordnet",
+  "files": [
+    {
+      "format": "csv",
+      "name": "casedword.csv",
+      "rows": 40790,
+      "sha256": "e72b68cb1e1b59e271096b63dd2aac44fbf8b5c712da23c57e3ba818ba8cf4b4"
+    },
+    {
+      "format": "csv",
+      "name": "categorydef.csv",
+      "rows": 44,
+      "sha256": "f45a0aafc88d7dca8ec47acf8777ed9ee38ffef8c282312770717bf2d4c5228e"
+    },
+    {
+      "format": "csv",
+      "name": "framedef.csv",
+      "rows": 34,
+      "sha256": "ee8c21c410c3f733cf2a6c9f090ad499a39ba512fc990f671857bae891723953"
+    },
+    {
+      "format": "csv",
+      "name": "frameref.csv",
+      "rows": 41624,
+      "sha256": "6a616678786006be5ab42ec55ff4f1d3c3662bdce367c00126ccf69876372560"
+    },
+    {
+      "format": "csv",
+      "name": "legacy2021.csv",
+      "rows": 93336,
+      "sha256": "cbfd4bc2d92593d9eb3fd9633adf0b3da125f474f4e9e9f2f879da26e8a59a49"
+    },
+    {
+      "format": "csv",
+      "name": "legacy2030.csv",
+      "rows": 115440,
+      "sha256": "881843fb9dfe3db7f81dd68b8ff549e7eab622f2eba8940a2ca0cb7497ff5140"
+    },
+    {
+      "format": "csv",
+      "name": "legacy2130.csv",
+      "rows": 95229,
+      "sha256": "cc7f7eb0db75f8a6b0e6c2369ada4a06d5d47472db267f39535f0c03d033cc96"
+    },
+    {
+      "format": "csv",
+      "name": "legacysensekey2021.csv",
+      "rows": 166054,
+      "sha256": "69f25c64a10e3692c96a35be63cf9c012c8b5f7764b5fd127786298a68079bc3"
+    },
+    {
+      "format": "csv",
+      "name": "legacysensekey2030.csv",
+      "rows": 166620,
+      "sha256": "41aa6fc5e0ccbf91c5c5d2c964a73548ca069470c4bfa459d5264f85d2df039c"
+    },
+    {
+      "format": "csv",
+      "name": "legacysensekey2130.csv",
+      "rows": 169806,
+      "sha256": "65d0e44aca5fc3165059025e723d21f42cec96baf1f0488bd5ceca91a31e53a5"
+    },
+    {
+      "format": "csv",
+      "name": "lexlinkref.csv",
+      "rows": 92230,
+      "sha256": "6112cdaaae2fb398464e2b7851235b2e380333c67ebd027d3945fc8926ebcf93"
+    },
+    {
+      "format": "csv",
+      "name": "linkdef.csv",
+      "rows": 27,
+      "sha256": "fd3fe1b5b5494566a822e91528341ac03c5da278b57c94a94ea97f6efff44b7a"
+    },
+    {
+      "format": "csv",
+      "name": "morphdef.csv",
+      "rows": 5939,
+      "sha256": "c97cf30fb5ffc20950906a66d0437df3cea12fd6f3a9e0f401986d3ce011e9b2"
+    },
+    {
+      "format": "csv",
+      "name": "morphref.csv",
+      "rows": 4963,
+      "sha256": "711b129fbe899289896fbbe355c0387fdbaed116ed76fa2e0e1c456991bf4206"
+    },
+    {
+      "format": "csv",
+      "name": "sample.csv",
+      "rows": 48355,
+      "sha256": "a48c9d151af95e7024accccdeb541ca2d53a1058c2299928dce9f3cb93dacc77"
+    },
+    {
+      "format": "csv",
+      "name": "semlinkref.csv",
+      "rows": 285347,
+      "sha256": "ec946779eb3c9aa1a9bc2f584e7410f82a4dd7eb645c33f6d09581d0310e8e91"
+    },
+    {
+      "format": "csv",
+      "name": "sense.csv",
+      "rows": 206940,
+      "sha256": "f84be295233f78f3bd8f6c49b4c6ab5dcc15211b14652615a81b5b37b7987dc2"
+    },
+    {
+      "format": "csv",
+      "name": "sentencedef.csv",
+      "rows": 169,
+      "sha256": "89d583a9aee225f274089e1931b15cebc823ce083cc309ec7982f15307e56426"
+    },
+    {
+      "format": "csv",
+      "name": "sentenceref.csv",
+      "rows": 3992,
+      "sha256": "fedce591b282dbf019707a482e1931375b133e8310d804d337b8aa4bd0f99ac0"
+    },
+    {
+      "format": "csv",
+      "name": "synset.csv",
+      "rows": 117658,
+      "sha256": "20506176d5b68e37317f2a5e34723231184109bd64a6aadcbb3040dc60b73e8a"
+    },
+    {
+      "format": "csv",
+      "name": "vnclass.csv",
+      "rows": 424,
+      "sha256": "2509fb0a0245e67baf0efdd5b049e3d763db296d3ce096f4e6c306d2c5cfc57a"
+    },
+    {
+      "format": "csv",
+      "name": "vnexampledef.csv",
+      "rows": 1237,
+      "sha256": "34e08e1915ef6e86d2ed6f7d21e1e5d8d0ab2123b745143ebb9d298816b59252"
+    },
+    {
+      "format": "csv",
+      "name": "vnexampleref.csv",
+      "rows": 1244,
+      "sha256": "83903c00fc65709e2b7e0fa27d39459011223e179221454064a2b9d8050a3a9b"
+    },
+    {
+      "format": "csv",
+      "name": "vnframedef.csv",
+      "rows": 1080,
+      "sha256": "ce3a343dd82d0c727909d800de336897c5b0b4cc79b2f606027dea45828d00fc"
+    },
+    {
+      "format": "csv",
+      "name": "vnframeref.csv",
+      "rows": 34440,
+      "sha256": "e7b6578e7552b54b769b89117ad9d74a2e7709b303e5d0de7ea3f7381bc946e2"
+    },
+    {
+      "format": "csv",
+      "name": "vnrole.csv",
+      "rows": 17235,
+      "sha256": "282afe3cfc803b22f354447335e6a63840f9b5dea4e59902301dbefa1fa929e3"
+    },
+    {
+      "format": "csv",
+      "name": "vnroletype.csv",
+      "rows": 28,
+      "sha256": "54b3774f69b29ce38f4423d12055fdbfed1262abc5fc1004ac6a7ce42cc0e30c"
+    },
+    {
+      "format": "csv",
+      "name": "vnselrestr.csv",
+      "rows": 29,
+      "sha256": "af30ea2d8597558fd5215f2d364d61196b3c0cd4e20ecac98b57dc96ede23f90"
+    },
+    {
+      "format": "csv",
+      "name": "vnselrestrs.csv",
+      "rows": 44,
+      "sha256": "d48cc8a47aa7d6f577068611870b658812f9135b67843f4179d0648caddc8116"
+    },
+    {
+      "format": "csv",
+      "name": "word.csv",
+      "rows": 147305,
+      "sha256": "02cde204db0a2cf0811a41c90f43e8ee31107c6aca25e19d0d5720b8d34d4167"
+    },
+    {
+      "format": "csv",
+      "name": "wordposition.csv",
+      "rows": 1054,
+      "sha256": "b72c077b405ddae5a66285225bed7261867d54e4264ee905ebd428f7e85d3fff"
+    },
+    {
+      "format": "csv",
+      "name": "xwnparselft.csv",
+      "rows": 133138,
+      "sha256": "cbcfed622f05ce45ad66d068611b1c868e91ec2789b7dbfae181ae31e5ac80bb"
+    },
+    {
+      "format": "csv",
+      "name": "xwnwsd.csv",
+      "rows": 115434,
+      "sha256": "1f29e984b272fc16eb10444478a76bdb07f5b379965d167e7220428be01d5b8d"
+    }
+  ],
+  "generated_at": "2025-11-02T06:29:21.264763+00:00",
+  "version": "3.0"
+}
