@@ -135,18 +135,18 @@
       "from": {
         "label": "synset",
         "match_on": [
-          "synsetid1:synsetid"
+          "synset1id:synsetid"
         ]
       },
       "to": {
         "label": "synset",
         "match_on": [
-          "synsetid2:synsetid"
+          "synset2id:synsetid"
         ]
       },
       "key": [
-        "synsetid1",
-        "synsetid2",
+        "synset1id",
+        "synset2id",
         "linkid"
       ],
       "properties": {
