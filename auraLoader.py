@@ -58,6 +58,25 @@ def count_rows_of_url(url: str) -> int:
             lines += 1
     return max(0, lines - 1)
 
+# ---------- NEW: CSV preflight for missing column values ----------
+def count_missing_col_in_csv(url: str, col: str) -> int:
+    import csv, io, requests
+    with requests.get(url, stream=True, timeout=60) as r:
+        r.raise_for_status()
+        data = "".join(chunk.decode("utf-8", errors="replace") for chunk in r.iter_content(65536))
+    bom = "\ufeff"
+    lines = data.splitlines()
+    if not lines:
+        return 0
+    lines[0] = lines[0].lstrip(bom)
+    buf = io.StringIO("\n".join(lines))
+    reader = csv.DictReader(buf)
+    n = 0
+    for row in reader:
+        v = (row.get(col) or "").strip().lstrip(bom)
+        if v == "" or v == r"\N":
+            n += 1
+    return n
 
 class Neo:
     def __init__(self, uri: str, user: str, password: str):
@@ -96,9 +115,11 @@ def build_constraint_cypher(runtime_indexes):
 def type_cast(expr: str, spec):
     t = spec.get("type", "string")
     transforms = spec.get("transform", [])
-    e = expr
-    if "trim" in transforms:
-        e = f"trim({e})"
+    # strip BOM + trim
+    e = f"replace({expr}, '\\uFEFF', '')"
+    e = f"trim({e})"
+    # treat '\N' as empty (NULL later)
+    e = f"CASE WHEN {e} = '\\\\N' THEN '' ELSE {e} END"
     if "lower" in transforms:
         e = f"toLower({e})"
     if t == "int":
@@ -107,20 +128,30 @@ def type_cast(expr: str, spec):
         e = f"toFloat({e})"
     return e
 
+
 def nullable_cast(expr: str, spec):
     base = type_cast(expr, spec)
-    if spec.get("nullable", False):
-        return f"CASE WHEN {expr} IS NULL OR {expr} = '' THEN NULL ELSE {base} END"
-    return base
+    # original expr check must recognize '\N' too
+    null_check = f"{expr} IS NULL OR {expr} = '' OR {expr} = '\\\\N'"
+    return f"CASE WHEN {null_check} THEN NULL ELSE {base} END" if spec.get("nullable", False) else base
+
 
 def build_node_load_cypher(node_spec, url_param: str, batch_id: str) -> str:
     label = node_spec["label"]
     mappings = node_spec["mappings"]
     key_fields = node_spec["key"]
+    key_cols = [mappings[k]["column"] for k in key_fields]
 
+    # MERGE pattern on key (after normalization)
     merge_on = ", ".join(
         f"{k}: {type_cast('row.' + mappings[k]['column'], mappings[k])}"
         for k in key_fields
+    )
+
+    # Filter predicate: all key columns must be non-empty after trim/BOM removal
+    key_preds = " AND ".join(
+        f"(CASE WHEN replace(trim(row.`{col}`), '\\uFEFF','') = '\\\\N' THEN '' ELSE replace(trim(row.`{col}`), '\\uFEFF','') END) <> ''"
+        for col in key_cols
     )
 
     setters = []
@@ -129,17 +160,19 @@ def build_node_load_cypher(node_spec, url_param: str, batch_id: str) -> str:
             setters.append(f"n.`{prop}` = {type_cast('row.' + spec['column'], spec)}")
         else:
             setters.append(f"n.`{prop}` = {nullable_cast('row.' + spec['column'], spec)}")
-    setters.append("n.source_system = $source_system")
-    setters.append("n.ingest_batch  = $ingest_batch")
-    setters.append("n.ingested_at   = datetime()")
+    setters += [
+        "n.source_system = $source_system",
+        "n.ingest_batch  = $ingest_batch",
+        "n.ingested_at   = datetime()"
+    ]
 
     cypher = (
         f"LOAD CSV WITH HEADERS FROM ${url_param} AS row\n"
+        f"WITH row WHERE {key_preds}\n"
         f"MERGE (n:`{label}` {{ {merge_on} }})\n"
         "SET " + ", ".join(setters)
     )
     return cypher
-
 
 def build_rel_load_cypher(rel_spec, url_param: str, batch_id: str) -> str:
     rtype = rel_spec["type"]
@@ -156,20 +189,46 @@ def build_rel_load_cypher(rel_spec, url_param: str, batch_id: str) -> str:
                 src_col, target_prop = k.split(":")
             else:
                 src_col, target_prop = k, k
-            parts.append(f"`{target_prop}`: toInteger(row.`{src_col}`)")
+            parts.append(f"`{target_prop}`: toInteger(replace(trim(row.`{src_col}`), '\\uFEFF',''))")
         return f"(x_{role}:`{label}` {{ {', '.join(parts)} }})"
 
-    pattern = f"(x_from)-[r:`{rtype}`]->(x_to)" if direction == "OUT" else f"(x_to)-[r:`{rtype}`]->(x_from)"
+    # required key columns in CSV (for WHERE guard)
+    required_cols = []
+    for k in from_spec["match_on"] + to_spec["match_on"]:
+        required_cols.append(k.split(":")[0] if ":" in k else k)
+
+    # If this rel has a 'linkid' property, also require it and merge on it
+    merge_rel_props = ""
+    linkid_guard = ""
+    if "linkid" in props:
+        linkid_guard = (
+          " AND (CASE WHEN replace(trim(row.`linkid`), '\\uFEFF','') = '\\\\N' "
+          "THEN '' ELSE replace(trim(row.`linkid`), '\\uFEFF','') END) <> ''"
+        )
+        merge_rel_props = " { linkid: toInteger(replace(trim(row.`linkid`), '\\uFEFF','')) }"
+
+    key_preds = " AND ".join(
+        [f"(CASE WHEN replace(trim(row.`{col}`), '\\uFEFF','') = '\\\\N' THEN '' ELSE replace(trim(row.`{col}`), '\\uFEFF','') END) <> ''"
+ for col in required_cols]
+    ) + linkid_guard
+
+    if direction == "OUT":
+        pattern = f"(x_from)-[r:`{rtype}`{merge_rel_props}]->(x_to)"
+    else:
+        pattern = f"(x_to)-[r:`{rtype}`{merge_rel_props}]->(x_from)"
 
     setters = []
     for prop, spec in props.items():
         setters.append(f"r.`{prop}` = {nullable_cast('row.' + spec['column'], spec)}")
-    setters.append("r.source_system = $source_system")
-    setters.append("r.ingest_batch  = $ingest_batch")
-    setters.append("r.ingested_at   = datetime()")
+    setters += [
+        "r.source_system = $source_system",
+        "r.ingest_batch  = $ingest_batch",
+        "r.ingested_at   = datetime()"
+    ]
 
     cypher = (
         f"LOAD CSV WITH HEADERS FROM ${url_param} AS row\n"
+        f"WITH row WHERE {key_preds}\n"
         f"MATCH {match_expr('from', from_spec)}, {match_expr('to', to_spec)}\n"
         f"MERGE {pattern}\n"
         "SET " + ", ".join(setters)
@@ -193,6 +252,66 @@ def promote_named_edges(neo, mapping):
         )
         neo.run_void(cypher, {"lid": lid})
 
+# ---------- NEW: DB-side preview & cleanup ----------
+def list_bad_synset_rels(neo, limit: int = 50) -> Dict[str, Any]:
+    """
+    Return {'total': int, 'sample': [rows...]} where rows contain a verbose preview
+    of :SYNSET rels with NULL linkid. Limits preview to `limit` rows.
+    """
+    total_rows = neo.run(
+        "MATCH ()-[r:SYNSET]->() WHERE r.linkid IS NULL RETURN count(r) AS n"
+    )
+    total = total_rows[0]["n"] if total_rows else 0
+    sample = []
+    if total > 0:
+        sample = neo.run(
+            """
+            MATCH (a:synset)-[r:SYNSET]->(b:synset)
+            WHERE r.linkid IS NULL
+            RETURN id(r) AS rel_id,
+                   a.synsetid AS from_id, a.pos AS from_pos, left(a.definition, 120) AS from_def,
+                   b.synsetid AS to_id,   b.pos AS to_pos,   left(b.definition, 120) AS to_def
+            LIMIT $limit
+            """,
+            {"limit": limit},
+        )
+    return {"total": total, "sample": sample}
+
+def clean_bad_synset_rels(neo) -> int:
+    """
+    Delete :SYNSET rels with NULL linkid. Returns number deleted (best-effort estimate).
+    """
+    # estimate before delete
+    rows = neo.run("MATCH ()-[r:SYNSET]->() WHERE r.linkid IS NULL RETURN count(r) AS n")
+    n = rows[0]["n"] if rows else 0
+    if n and n > 0:
+        neo.run_void("MATCH ()-[r:SYNSET]->() WHERE r.linkid IS NULL DELETE r")
+    return n
+
+def preview_and_maybe_clean(neo, auto_yes: bool = False, preview_limit: int = 50):
+    info = list_bad_synset_rels(neo, limit=preview_limit)
+    total = info["total"]
+    if total == 0:
+        print("Null-linkid check: no :SYNSET relationships with NULL linkid. ✅")
+        return
+    print(f"\n⚠ Found {total} :SYNSET relationships missing linkid. Preview (up to {preview_limit}):")
+    for i, row in enumerate(info["sample"], 1):
+        print(
+            f"  [{i}] rel_id={row['rel_id']} "
+            f"FROM ({row['from_pos']} {row['from_id']}) \"{row['from_def']}\" "
+            f"--> TO ({row['to_pos']} {row['to_id']}) \"{row['to_def']}\""
+        )
+    if auto_yes:
+        deleted = clean_bad_synset_rels(neo)
+        print(f"Deleted {deleted} null-linkid :SYNSET relationships.")
+        return
+    # interactive prompt
+    ans = input("\nDelete ALL null-linkid :SYNSET relationships now? [y/N]: ").strip().lower()
+    if ans == "y":
+        deleted = clean_bad_synset_rels(neo)
+        print(f"Deleted {deleted} null-linkid :SYNSET relationships.")
+    else:
+        print("Leaving null-linkid :SYNSET relationships intact.")
 
 def main():
     ap = argparse.ArgumentParser(description="Aura Loader for WordNet mapping spec")
@@ -205,12 +324,21 @@ def main():
     ap.add_argument("--batch-id", default=None, help="Ingest batch id; default = mapping.version + timestamp")
     ap.add_argument("--verify-checksums", action="store_true")
     ap.add_argument("--verify-rowcounts", action="store_true")
+    ap.add_argument("--strict-missing-linkid", action="store_true",
+                    help="Fail preflight if semlinkref has any empty linkid values")
+    ap.add_argument("--preview-null-linkid", action="store_true",
+                    help="After loading semlinkref, show a verbose preview and prompt to delete null-linkid :SYNSET relationships")
+    ap.add_argument("--auto-yes-clean-null-linkid", action="store_true",
+                    help="Delete null-linkid :SYNSET relationships automatically (no prompt) after loading semlinkref")
+    ap.add_argument("--preview-limit", type=int, default=50,
+                    help="Max rows to show in the null-linkid preview (default: 50)")
     args = ap.parse_args()
 
     if not args.password:
         print("ERROR: Provide --password or set NEO4J_PASSWORD env var.", file=sys.stderr)
         sys.exit(2)
 
+    print("MAPPING:", args.mapping)
     mapping = read_json(args.mapping)
     manifest = read_json(args.manifest)
 
@@ -218,6 +346,7 @@ def main():
 
     for s in mapping.get("sources", []):
         base = os.path.basename(s["path"])
+        print("BASE PATH: ", base)
         if base in mani_index:
             s["checksum_sha256"] = mani_index[base].get("sha256")
             s["rows"] = mani_index[base].get("rows")
@@ -233,11 +362,12 @@ def main():
         neo.run_void(stmt)
 
     # preflight
-    if args.verify_checksums or args.verify_rowcounts:
+    if args.verify_checksums or args.verify_rowcounts or args.strict_missing_linkid:
         print("Preflight: verifying sources")
         for src in mapping.get("sources", []):
             url = to_url(args.base_url, src["path"])
-            print(f"  {src['name']}: {url}")
+            name = src["name"]
+            print(f"  {name}: {url}")
             if args.verify_checksums and src.get("checksum_sha256"):
                 h = sha256_of_url(url)
                 if h != src["checksum_sha256"]:
@@ -250,6 +380,20 @@ def main():
                     print(f"    ERROR rowcount mismatch (got {n}, expected {src['rows']})", file=sys.stderr)
                     sys.exit(4)
                 print("    rowcount OK")
+            # NEW: semlinkref guard for missing linkid
+            if name == "semlinkref":
+                try:
+                    missing = count_missing_col_in_csv(url, "linkid")
+                except Exception as e:
+                    print(f"    WARNING: could not inspect linkid in semlinkref.csv: {e}")
+                else:
+                    if missing > 0:
+                        msg = f"    WARNING: semlinkref.csv has {missing} rows with empty linkid"
+                        if args.strict_missing_linkid:
+                            print(msg, file=sys.stderr)
+                            sys.exit(6)
+                        else:
+                            print(msg)
 
     params_common = {
         "source_system": mapping.get("ingest_batch", {}).get("attach_properties", {}).get("source_system", "wordnet"),
@@ -274,6 +418,7 @@ def main():
             cypher = build_node_load_cypher(spec, "url", args.batch_id)
             print(f"Loading nodes {key} from {url}")
             neo.run_void(cypher, {**params_common, "url": url})
+
         elif item.startswith("relationships."):
             key = item.split(".", 1)[1]
             spec = rels[key]
@@ -281,6 +426,14 @@ def main():
             cypher = build_rel_load_cypher(spec, "url", args.batch_id)
             print(f"Loading rels {key} from {url}")
             neo.run_void(cypher, {**params_common, "url": url})
+
+            # After loading SYNSET edges, optionally preview and/or clean
+            if key == "semantic_SYNSET":
+                if args.auto_yes_clean_null_linkid:
+                    preview_and_maybe_clean(neo, auto_yes=True, preview_limit=args.preview_limit)
+                elif args.preview_null_linkid:
+                    preview_and_maybe_clean(neo, auto_yes=False, preview_limit=args.preview_limit)
+
         elif item.startswith("derived_relationships."):
             print("Promoting named edges...")
             promote_named_edges(neo, mapping)

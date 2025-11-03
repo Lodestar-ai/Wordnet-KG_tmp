@@ -1,0 +1,272 @@
+{
+  "schema_version": "1.0",
+  "dataset": "wordnet",
+  "version": "3.0",
+  "encoding": "utf-8",
+  "csv": {
+    "delimiter": ",",
+    "quotechar": "\"",
+    "newline": "lf",
+    "has_header": true
+  },
+  "sources": [
+    {
+      "name": "synset",
+      "path": "synset.csv"
+    },
+    {
+      "name": "word",
+      "path": "word.csv"
+    },
+    {
+      "name": "sense",
+      "path": "sense.csv"
+    },
+    {
+      "name": "semlinkref",
+      "path": "semlinkref.csv"
+    },
+    {
+      "name": "linkdef",
+      "path": "linkdef.csv"
+    }
+  ],
+  "ingest_batch": {
+    "id_prefix": "wn-3.0-",
+    "attach_properties": {
+      "source_system": "wordnet",
+      "ingested_at": "@now_utc_iso8601"
+    }
+  },
+  "nodes": {
+    "synset": {
+      "source": "synset",
+      "label": "synset",
+      "key": [
+        "synsetid"
+      ],
+      "mappings": {
+        "synsetid": {
+          "column": "synsetid",
+          "type": "int"
+        },
+        "pos": {
+          "column": "pos",
+          "type": "string",
+          "transform": [
+            "trim",
+            "lower"
+          ]
+        },
+        "definition": {
+          "column": "definition",
+          "type": "string",
+          "transform": [
+            "trim"
+          ]
+        }
+      }
+    },
+    "word": {
+      "source": "word",
+      "label": "word",
+      "key": [
+        "wordid"
+      ],
+      "mappings": {
+        "wordid": {
+          "column": "wordid",
+          "type": "int"
+        },
+        "lemma": {
+          "column": "lemma",
+          "type": "string",
+          "transform": [
+            "trim",
+            "lower"
+          ]
+        }
+      }
+    }
+  },
+  "relationships": {
+    "membership_WORD": {
+      "source": "sense",
+      "type": "WORD",
+      "direction": "OUT",
+      "from": {
+        "label": "synset",
+        "match_on": [
+          "synsetid"
+        ]
+      },
+      "to": {
+        "label": "word",
+        "match_on": [
+          "wordid"
+        ]
+      },
+      "key": [
+        "synsetid",
+        "wordid"
+      ],
+      "properties": {
+        "rank": {
+          "column": "rank",
+          "type": "int",
+          "nullable": true
+        },
+        "lexid": {
+          "column": "lexid",
+          "type": "int",
+          "nullable": true
+        },
+        "tagcount": {
+          "column": "tagcount",
+          "type": "int",
+          "nullable": true
+        }
+      }
+    },
+    "semantic_SYNSET": {
+      "source": "semlinkref",
+      "type": "SYNSET",
+      "direction": "OUT",
+      "from": {
+        "label": "synset",
+        "match_on": [
+          "synsetid1:synsetid"
+        ]
+      },
+      "to": {
+        "label": "synset",
+        "match_on": [
+          "synsetid2:synsetid"
+        ]
+      },
+      "key": [
+        "synsetid1",
+        "synsetid2",
+        "linkid"
+      ],
+      "properties": {
+        "linkid": {
+          "column": "linkid",
+          "type": "int"
+        }
+      }
+    }
+  },
+  "derived_relationships": {
+    "promote_named_edges": {
+      "from": "semantic_SYNSET",
+      "strategy": "by_linkid",
+      "map": [
+        {
+          "linkid": 1,
+          "type": "HYPERNYM"
+        },
+        {
+          "linkid": 2,
+          "type": "HYPONYM"
+        },
+        {
+          "linkid": 3,
+          "type": "INSTANCE_HYPERNYM"
+        },
+        {
+          "linkid": 4,
+          "type": "INSTANCE_HYPONYM"
+        },
+        {
+          "linkid": 12,
+          "type": "PART_MERONYM"
+        },
+        {
+          "linkid": 14,
+          "type": "MEMBER_MERONYM"
+        },
+        {
+          "linkid": 16,
+          "type": "SUBSTANCE_MERONYM"
+        }
+      ],
+      "deduplicate": true,
+      "retain_source_edge": true
+    }
+  },
+  "validation": {
+    "graph_assertions": [
+      {
+        "cypher": "MATCH (s:synset) RETURN count(s) > 0 AS ok"
+      },
+      {
+        "cypher": "MATCH ()-[r:SYNSET]->() RETURN count(r) > 0 AS ok"
+      },
+      {
+        "cypher": "MATCH ()-[r:SYNSET]->() WHERE r.linkid IS NULL RETURN count(r)=0 AS ok"
+      },
+      {
+        "cypher": "MATCH (s:synset)-[:WORD]->(w:word) RETURN count(*) > 0 AS ok"
+      }
+    ]
+  },
+  "load_order": [
+    "nodes.synset",
+    "nodes.word",
+    "relationships.membership_WORD",
+    "relationships.semantic_SYNSET",
+    "derived_relationships.promote_named_edges"
+  ],
+  "runtime": {
+    "neo4j_mode": "aura",
+    "batching": {
+      "load_csv": {
+        "periodic_commit": 10000
+      },
+      "merge": {
+        "use_unwind_batches_of": 10000
+      }
+    },
+    "indexes": [
+      {
+        "kind": "constraint",
+        "label": "synset",
+        "properties": [
+          "synsetid"
+        ],
+        "unique": true
+      },
+      {
+        "kind": "constraint",
+        "label": "word",
+        "properties": [
+          "wordid"
+        ],
+        "unique": true
+      },
+      {
+        "kind": "rel_index",
+        "type": "SYNSET",
+        "properties": [
+          "linkid"
+        ]
+      }
+    ],
+    "provenance": {
+      "attach_to_nodes": [
+        "synset",
+        "word"
+      ],
+      "attach_to_rels": [
+        "membership_WORD",
+        "semantic_SYNSET"
+      ],
+      "properties": [
+        "source_system",
+        "ingested_at",
+        "ingest_batch"
+      ]
+    }
+  }
+}

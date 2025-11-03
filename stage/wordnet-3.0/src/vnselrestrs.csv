@@ -1,3 +1,4 @@
+"selrestrsid","selrestrs"
 "1","<SELRESTRS><SELRESTR Value=\"+\" type=\"animate\"/></SELRESTRS>"
 "2","<SELRESTRS/>"
 "3","<SELRESTRS logic=\"or\"><SELRESTR Value=\"+\" type=\"animate\"/><SELRESTR Value=\"+\" type=\"organization\"/></SELRESTRS>"
