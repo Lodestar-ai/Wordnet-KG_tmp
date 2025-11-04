@@ -58,7 +58,7 @@ def count_rows_of_url(url: str) -> int:
             lines += 1
     return max(0, lines - 1)
 
-# ---------- NEW: CSV preflight for missing column values ----------
+# ---------- CSV preflight for missing column values ----------
 def count_missing_col_in_csv(url: str, col: str) -> int:
     import csv, io, requests
     with requests.get(url, stream=True, timeout=60) as r:
@@ -128,29 +128,26 @@ def type_cast(expr: str, spec):
         e = f"toFloat({e})"
     return e
 
-
 def nullable_cast(expr: str, spec):
     base = type_cast(expr, spec)
-    # original expr check must recognize '\N' too
     null_check = f"{expr} IS NULL OR {expr} = '' OR {expr} = '\\\\N'"
     return f"CASE WHEN {null_check} THEN NULL ELSE {base} END" if spec.get("nullable", False) else base
 
-
-def build_node_load_cypher(node_spec, url_param: str, batch_id: str) -> str:
+# ---------- BUILDERS RETURN ONLY THE BODY (starting with WITH row ...) ----------
+def build_node_load_body(node_spec) -> str:
     label = node_spec["label"]
     mappings = node_spec["mappings"]
     key_fields = node_spec["key"]
     key_cols = [mappings[k]["column"] for k in key_fields]
 
-    # MERGE pattern on key (after normalization)
     merge_on = ", ".join(
         f"{k}: {type_cast('row.' + mappings[k]['column'], mappings[k])}"
         for k in key_fields
     )
 
-    # Filter predicate: all key columns must be non-empty after trim/BOM removal
     key_preds = " AND ".join(
-        f"(CASE WHEN replace(trim(row.`{col}`), '\\uFEFF','') = '\\\\N' THEN '' ELSE replace(trim(row.`{col}`), '\\uFEFF','') END) <> ''"
+        f"(CASE WHEN replace(trim(row.`{col}`), '\\uFEFF','') = '\\\\N' "
+        f"THEN '' ELSE replace(trim(row.`{col}`), '\\uFEFF','') END) <> ''"
         for col in key_cols
     )
 
@@ -166,15 +163,14 @@ def build_node_load_cypher(node_spec, url_param: str, batch_id: str) -> str:
         "n.ingested_at   = datetime()"
     ]
 
-    cypher = (
-        f"LOAD CSV WITH HEADERS FROM ${url_param} AS row\n"
+    body = (
         f"WITH row WHERE {key_preds}\n"
         f"MERGE (n:`{label}` {{ {merge_on} }})\n"
         "SET " + ", ".join(setters)
     )
-    return cypher
+    return body
 
-def build_rel_load_cypher(rel_spec, url_param: str, batch_id: str) -> str:
+def build_rel_load_body(rel_spec) -> str:
     rtype = rel_spec["type"]
     direction = rel_spec.get("direction", "OUT").upper()
     from_spec = rel_spec["from"]
@@ -192,12 +188,10 @@ def build_rel_load_cypher(rel_spec, url_param: str, batch_id: str) -> str:
             parts.append(f"`{target_prop}`: toInteger(replace(trim(row.`{src_col}`), '\\uFEFF',''))")
         return f"(x_{role}:`{label}` {{ {', '.join(parts)} }})"
 
-    # required key columns in CSV (for WHERE guard)
     required_cols = []
     for k in from_spec["match_on"] + to_spec["match_on"]:
         required_cols.append(k.split(":")[0] if ":" in k else k)
 
-    # If this rel has a 'linkid' property, also require it and merge on it
     merge_rel_props = ""
     linkid_guard = ""
     if "linkid" in props:
@@ -209,7 +203,7 @@ def build_rel_load_cypher(rel_spec, url_param: str, batch_id: str) -> str:
 
     key_preds = " AND ".join(
         [f"(CASE WHEN replace(trim(row.`{col}`), '\\uFEFF','') = '\\\\N' THEN '' ELSE replace(trim(row.`{col}`), '\\uFEFF','') END) <> ''"
- for col in required_cols]
+         for col in required_cols]
     ) + linkid_guard
 
     if direction == "OUT":
@@ -226,14 +220,25 @@ def build_rel_load_cypher(rel_spec, url_param: str, batch_id: str) -> str:
         "r.ingested_at   = datetime()"
     ]
 
-    cypher = (
-        f"LOAD CSV WITH HEADERS FROM ${url_param} AS row\n"
+    body = (
         f"WITH row WHERE {key_preds}\n"
         f"MATCH {match_expr('from', from_spec)}, {match_expr('to', to_spec)}\n"
         f"MERGE {pattern}\n"
         "SET " + ", ".join(setters)
     )
-    return cypher
+    return body
+
+# ---------- Compose full LOAD CSV with proper batching ----------
+
+def load_csv_batched(url_param: str, body: str, rows: int) -> str:
+    # Use plain strings around braces; only interpolate `rows`
+    return (
+        "LOAD CSV WITH HEADERS FROM $" + url_param + " AS row\n"
+        "CALL (row) {\n"
+        "  " + body.replace("\n", "\n  ") + "\n"
+        "}"
+        f" IN TRANSACTIONS OF {rows} ROWS"
+    )
 
 def promote_named_edges(neo, mapping):
     derived = mapping.get("derived_relationships", {}).get("promote_named_edges")
@@ -252,12 +257,8 @@ def promote_named_edges(neo, mapping):
         )
         neo.run_void(cypher, {"lid": lid})
 
-# ---------- NEW: DB-side preview & cleanup ----------
+# ---------- DB-side preview & cleanup ----------
 def list_bad_synset_rels(neo, limit: int = 50) -> Dict[str, Any]:
-    """
-    Return {'total': int, 'sample': [rows...]} where rows contain a verbose preview
-    of :SYNSET rels with NULL linkid. Limits preview to `limit` rows.
-    """
     total_rows = neo.run(
         "MATCH ()-[r:SYNSET]->() WHERE r.linkid IS NULL RETURN count(r) AS n"
     )
@@ -268,7 +269,7 @@ def list_bad_synset_rels(neo, limit: int = 50) -> Dict[str, Any]:
             """
             MATCH (a:synset)-[r:SYNSET]->(b:synset)
             WHERE r.linkid IS NULL
-            RETURN id(r) AS rel_id,
+            RETURN elementId(r) AS rel_eid,
                    a.synsetid AS from_id, a.pos AS from_pos, left(a.definition, 120) AS from_def,
                    b.synsetid AS to_id,   b.pos AS to_pos,   left(b.definition, 120) AS to_def
             LIMIT $limit
@@ -277,16 +278,28 @@ def list_bad_synset_rels(neo, limit: int = 50) -> Dict[str, Any]:
         )
     return {"total": total, "sample": sample}
 
-def clean_bad_synset_rels(neo) -> int:
+def clean_bad_synset_rels(neo, chunk: int = 20000, max_loops: int = 1000) -> int:
     """
-    Delete :SYNSET rels with NULL linkid. Returns number deleted (best-effort estimate).
+    Delete :SYNSET rels with NULL linkid in small batches to avoid memory/timeouts.
+    Returns total deleted.
     """
-    # estimate before delete
-    rows = neo.run("MATCH ()-[r:SYNSET]->() WHERE r.linkid IS NULL RETURN count(r) AS n")
-    n = rows[0]["n"] if rows else 0
-    if n and n > 0:
-        neo.run_void("MATCH ()-[r:SYNSET]->() WHERE r.linkid IS NULL DELETE r")
-    return n
+    total = 0
+    for _ in range(max_loops):
+        rows = neo.run(
+            """
+            MATCH ()-[r:SYNSET]->()
+            WHERE r.linkid IS NULL
+            WITH r LIMIT $chunk
+            DELETE r
+            RETURN count(*) AS c
+            """,
+            {"chunk": chunk},
+        )
+        c = rows[0]["c"] if rows else 0
+        total += c
+        if c == 0:
+            break
+    return total
 
 def preview_and_maybe_clean(neo, auto_yes: bool = False, preview_limit: int = 50):
     info = list_bad_synset_rels(neo, limit=preview_limit)
@@ -297,18 +310,17 @@ def preview_and_maybe_clean(neo, auto_yes: bool = False, preview_limit: int = 50
     print(f"\n⚠ Found {total} :SYNSET relationships missing linkid. Preview (up to {preview_limit}):")
     for i, row in enumerate(info["sample"], 1):
         print(
-            f"  [{i}] rel_id={row['rel_id']} "
+            f"  [{i}] rel_eid={row['rel_eid']} "
             f"FROM ({row['from_pos']} {row['from_id']}) \"{row['from_def']}\" "
             f"--> TO ({row['to_pos']} {row['to_id']}) \"{row['to_def']}\""
         )
     if auto_yes:
-        deleted = clean_bad_synset_rels(neo)
+        deleted = clean_bad_synset_rels(neo, chunk=20000)
         print(f"Deleted {deleted} null-linkid :SYNSET relationships.")
         return
-    # interactive prompt
     ans = input("\nDelete ALL null-linkid :SYNSET relationships now? [y/N]: ").strip().lower()
     if ans == "y":
-        deleted = clean_bad_synset_rels(neo)
+        deleted = clean_bad_synset_rels(neo, chunk=20000)
         print(f"Deleted {deleted} null-linkid :SYNSET relationships.")
     else:
         print("Leaving null-linkid :SYNSET relationships intact.")
@@ -332,6 +344,8 @@ def main():
                     help="Delete null-linkid :SYNSET relationships automatically (no prompt) after loading semlinkref")
     ap.add_argument("--preview-limit", type=int, default=50,
                     help="Max rows to show in the null-linkid preview (default: 50)")
+    ap.add_argument("--batch-rows", type=int, default=10000,
+                    help="Rows per transaction for LOAD CSV batching (Neo4j 5: IN TRANSACTIONS)")
     args = ap.parse_args()
 
     if not args.password:
@@ -380,7 +394,6 @@ def main():
                     print(f"    ERROR rowcount mismatch (got {n}, expected {src['rows']})", file=sys.stderr)
                     sys.exit(4)
                 print("    rowcount OK")
-            # NEW: semlinkref guard for missing linkid
             if name == "semlinkref":
                 try:
                     missing = count_missing_col_in_csv(url, "linkid")
@@ -415,7 +428,8 @@ def main():
             key = item.split(".", 1)[1]
             spec = nodes[key]
             url = url_for_source_name(spec["source"])
-            cypher = build_node_load_cypher(spec, "url", args.batch_id)
+            body = build_node_load_body(spec)
+            cypher = load_csv_batched("url", body, args.batch_rows)
             print(f"Loading nodes {key} from {url}")
             neo.run_void(cypher, {**params_common, "url": url})
 
@@ -423,11 +437,11 @@ def main():
             key = item.split(".", 1)[1]
             spec = rels[key]
             url = url_for_source_name(spec["source"])
-            cypher = build_rel_load_cypher(spec, "url", args.batch_id)
+            body = build_rel_load_body(spec)
+            cypher = load_csv_batched("url", body, args.batch_rows)
             print(f"Loading rels {key} from {url}")
             neo.run_void(cypher, {**params_common, "url": url})
 
-            # After loading SYNSET edges, optionally preview and/or clean
             if key == "semantic_SYNSET":
                 if args.auto_yes_clean_null_linkid:
                     preview_and_maybe_clean(neo, auto_yes=True, preview_limit=args.preview_limit)

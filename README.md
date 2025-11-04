@@ -1,14 +1,6 @@
 # WordNet KG Staging (CSV → Neo4j/Aura)
 
-This repo holds **immutable CSV extracts** of WordNet and a **machine-readable manifest** (checksums + row counts) used to load into a Neo4j knowledge graph.  
-Phase 1 stages files via **GitHub Releases**. Later, we’ll migrate to **AWS S3** with the same manifest and load steps.
-
-## Repo Purpose
-
-- Provide a **repeatable, testable** staging area for CSVs before loading to Neo4j/Aura.
-- Record **file integrity** via SHA-256 and row counts in `manifest/manifest.json`.
-- Support **idempotent loads** and quick rollback using batch IDs.
-- Enable a clean migration path from GitHub Releases → **AWS S3** without changing pipeline logic.
+This repo holds **immutable CSV extracts** of WordNet and a **machine‑readable manifest** (checksums + row counts) used to load into a Neo4j knowledge graph. Phase 1 stages files via **GitHub Releases**; we’ll migrate to **AWS S3** next without changing pipeline logic.
 
 ## Layout
 
@@ -25,73 +17,79 @@ stage/
     manifest/
       manifest.json      # per-file sha256 + row counts
       manifest.sha256    # sha256 of manifest.json
-scripts/
-  make_manifest.py
+    mappings/
+      wordnet-3.0.json   # mapping spec: nodes, rels, derived rels, validation
+bin/
+  auraLoader.py          # idempotent loader for Neo4j/Aura (LOAD CSV + batching)
+  buildMetadata.py       # builds manifest.json + manifest.sha256; ensures/repairs mapping
+  extractDB-CSV.py       # exports from MySQL → CSV (headers, canonical encodings)
 README.md
 ```
 
+## What changed vs. earlier iteration
+
+- Scripts moved to `bin/` and **mappings** now live in `stage/wordnet-3.0/mappings/`.
+- `make_manifest.py` → **`buildMetadata.py`** which:
+  - Regenerates **manifest** (dataset, per‑file `sha256` + `rows`) during initial ingestion.
+  - Validates/repairs **mapping** (`wordnet-3.0.json`) so required sections exist (nodes, relationships, derived, validation, indexes).
+
+> **Lifecycle:** **Manifest is one‑off per immutable CSV drop** (created at initial ingestion). **Mappings evolve per revision** of the graph model (e.g., add a new derived edge) without changing the raw CSVs.
+
 ## Prereqs
 
-- Python 3.8+ (for `scripts/make_manifest.py`)
-- (For later) AWS CLI v2 configured (`aws configure`)
+- Python 3.8+
+- `pip install neo4j requests`
+- (Later) AWS CLI v2 for S3 publishing
 
-## Prepare a New Dataset Version
+## Ingestion — canonical order
 
-1) Put all CSVs under `stage/wordnet-<ver>/src/`.  
-2) Build the manifest:
-   ```bash
-   python3 scripts/make_manifest.py --base ./stage/wordnet-3.0
-   ```
+1) Place CSVs under `stage/wordnet-3.0/src/`.
+2) Build metadata:
+```bash
+python3 bin/buildMetadata.py --base ./stage/wordnet-3.0
+```
+This writes:
+- `stage/wordnet-3.0/manifest/manifest.json`
+- `stage/wordnet-3.0/manifest/manifest.sha256`
+- Ensures `stage/wordnet-3.0/mappings/wordnet-3.0.json` is present and complete.
+
 3) (Optional) Verify locally:
-   ```bash
-   # check manifest integrity
-   shasum -a 256 stage/wordnet-3.0/manifest/manifest.json
-   cat stage/wordnet-3.0/manifest/manifest.sha256
+```bash
+# check manifest integrity
+shasum -a 256 stage/wordnet-3.0/manifest/manifest.json
+cat stage/wordnet-3.0/manifest/manifest.sha256
 
-   # spot-check a file
-   shasum -a 256 stage/wordnet-3.0/src/semlinkref.csv
-   wc -l stage/wordnet-3.0/src/semlinkref.csv  # rows = (lines - 1)
-   ```
+# spot-check a file
+shasum -a 256 stage/wordnet-3.0/src/semlinkref.csv
+wc -l stage/wordnet-3.0/src/semlinkref.csv  # rows = (lines - 1)
+```
 
 ## Phase 1: Publish via GitHub Releases (current)
 
 1) **Tag & release**
-   ```bash
-   git add -A
-   git commit -m "WordNet 3.0 dataset"
-   git tag dataset/wordnet-3.0
-   git push --tags
-   ```
-   Create a GitHub **Release** from this tag and upload:
-   - All CSVs from `stage/wordnet-3.0/src/`
-   - `stage/wordnet-3.0/manifest/manifest.json`
-   - `stage/wordnet-3.0/manifest/manifest.sha256`
+```bash
+git add -A
+git commit -m "WordNet 3.0 dataset"
+git tag v0.1.0-alpha
+git push --tags
+# create a Release for the tag and upload:
+#  - all CSVs under stage/wordnet-3.0/src/
+#  - stage/wordnet-3.0/manifest/manifest.json
+#  - stage/wordnet-3.0/manifest/manifest.sha256
+```
 
-2) **Use with Neo4j Aura (`LOAD CSV`)**  
-   Copy the **HTTPS** asset URLs from the Release for each file:
-   ```cypher
-   // Example: load synsets (Aura)
-   :PARAM synsetUrl => 'https://github.com/<org>/<repo>/releases/download/dataset%2Fwordnet-3.0/synset.csv';
-   :PARAM batch => 'wn-3.0-2025-11-02';
+2) **Load into Neo4j Aura using `auraLoader.py`**
+```bash
+python3 ./bin/auraLoader.py   --aura-uri neo4j+s://<host>.databases.neo4j.io   --user neo4j   --password '<password>'   --mapping  stage/wordnet-3.0/mappings/wordnet-3.0.json   --manifest stage/wordnet-3.0/manifest/manifest.json   --base-url 'https://github.com/<org>/<repo>/releases/download/<tag>/'   --verify-checksums   --verify-rowcounts   --strict-missing-linkid   --auto-yes-clean-null-linkid   --batch-rows 1000
+```
 
-   LOAD CSV WITH HEADERS FROM $synsetUrl AS row
-   MERGE (s:synset {synsetid: toInteger(row.synsetid)})
-   SET s.pos = row.pos,
-       s.definition = row.definition,
-       s.source_system = 'wordnet',
-       s.ingest_batch = $batch,
-       s.ingested_at = datetime();
-   ```
+**Notes**
+- Release assets must be **HTTPS** and reachable by Aura (no auth). If you need private access before S3, host on a public TLS static site or use S3 **presigned URLs** (see next phase).
+- The loader batches with `CALL (row) { … } IN TRANSACTIONS OF N ROWS` and rejects rows with missing keys and `\N` sentinels where appropriate.
 
-> **Notes**  
-> • Release assets are public; if you need private hosting before S3, use your own HTTPS static host with TLS.  
-> • Aura cannot fetch from `file:///` or authenticated endpoints.
+## Phase 2: Migrate Staging to AWS S3 (next)
 
----
-
-## Phase 2: Migrate Staging to AWS S3 (later)
-
-### 1) Create the bucket (with versioning + encryption)
+1) Create the bucket (versioned & encrypted):
 ```bash
 export BUCKET=kg-staging-wordnet
 aws s3api create-bucket --bucket $BUCKET --region us-east-1
@@ -100,90 +98,31 @@ aws s3api put-bucket-encryption --bucket $BUCKET --server-side-encryption-config
   "Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
 ```
 
-### 2) Upload the dataset
-Use a structured prefix so multiple versions can live side by side.
+2) Upload the dataset:
 ```bash
 aws s3 sync stage/wordnet-3.0/src        s3://$BUCKET/wordnet/3.0/src/
 aws s3 cp   stage/wordnet-3.0/manifest/manifest.json   s3://$BUCKET/wordnet/3.0/manifest/manifest.json
 aws s3 cp   stage/wordnet-3.0/manifest/manifest.sha256 s3://$BUCKET/wordnet/3.0/manifest/manifest.sha256
 ```
 
-### 3) (Optional) Make read-only public or use presigned URLs
-**Presigned (recommended for Aura):**
+3) Use **presigned** links for Aura:
 ```bash
-aws s3 presign s3://$BUCKET/wordnet/3.0/src/synset.csv --expires-in 604800  # 7 days
-```
-Repeat for each CSV and for `manifest.json`.
-
-> If you instead make the bucket public, apply a read-only bucket policy and **block uploads** from public; presigned links are safer.
-
-### 4) Update `LOAD CSV` URLs in Cypher
-```cypher
-:PARAM synsetUrl   => 'https://<presigned-url-for-synset.csv>';
-:PARAM semlinkUrl  => 'https://<presigned-url-for-semlinkref.csv>';
-:PARAM manifestUrl => 'https://<presigned-url-for-manifest.json>';
+aws s3 presign s3://$BUCKET/wordnet/3.0/src/synset.csv --expires-in 604800
 ```
 
-### 5) Integrity checks before load (optional but recommended)
-Compare `manifest.json` values to the files you’re about to load.
-```bash
-# local verification of an S3 object
-aws s3 cp s3://$BUCKET/wordnet/3.0/src/synset.csv - | shasum -a 256
-# compare with manifest.json's sha256
-```
+4) Update the loader `--base-url` to your S3 HTTPS (presigned) prefix.
+
+## Validation & smoke tests
+
+- The mapping includes **graph assertions** (non‑empty node set; non‑NULL `linkid` on `:SYNSET`; `:WORD` edges exist).
+- Keep **golden queries** (e.g., “hypernyms of horse”) as smoke tests after each load.
+
+## Next Steps
+
+- **GitHub → AWS (staging):** Ship artifacts via Releases today, then automate publishing to S3 with GitHub Actions; keep the same manifest layout and loader flags.
+- **Schema versions & ingestion batches:** Track `schema_version` in mapping; attach `ingest_batch` and timestamps to nodes/rels for idempotency and rollback. Maintain a changelog of mapping revisions.
+- **Data‑source agnosticism:** Preserve a stable CSV contract, but formalize exporters for *any* source (SQL/NoSQL/files). Add extractors for new sources that map into the same CSVs + manifest.
+- **Incremental updates API:** Provide a small service that accepts new extracts (or CDC deltas), updates manifests, stamps a new `ingest_batch`, and triggers the loader. Expose health checks and validation results per batch.
 
 ---
-
-## Loading Order (canonical → derived)
-
-1) **Canonical nodes**
-   - `synset.csv`, `word.csv`, (optionally `sense.csv` if modeled as nodes)
-
-2) **Membership edges**
-   - From `sense.csv` *or* via `:WORD` rel with sense props:
-   ```cypher
-   :PARAM senseUrl => $your_url
-   LOAD CSV WITH HEADERS FROM $senseUrl AS row
-   MATCH (s:synset {synsetid: toInteger(row.synsetid)}),
-         (w:word   {wordid:  toInteger(row.wordid)})
-   MERGE (s)-[m:WORD]->(w)
-   SET m.rank = toInteger(row.rank),
-       m.lexid = toInteger(row.lexid),
-       m.tagcount = CASE WHEN row.tagcount <> '' THEN toInteger(row.tagcount) END;
-   ```
-
-3) **Semantic edges**
-   - `semlinkref.csv` → `:SYNSET {linkid}` (source of truth)
-   - Promote named rels (derived) after canonical load.
-
----
-
-## Derived Edges (Hybrid Model)
-
-Keep `:SYNSET{linkid}` as source of truth; promote only “hot” types:
-
-```cypher
-MATCH (a:synset)-[r:SYNSET {linkid:1}]->(b:synset)  MERGE (a)-[:HYPERNYM]->(b);
-MATCH (a:synset)-[r:SYNSET {linkid:2}]->(b:synset)  MERGE (a)-[:HYPONYM]->(b);
-MATCH (a:synset)-[r:SYNSET {linkid:3}]->(b:synset)  MERGE (a)-[:INSTANCE_HYPERNYM]->(b);
-MATCH (a:synset)-[r:SYNSET {linkid:4}]->(b:synset)  MERGE (a)-[:INSTANCE_HYPONYM]->(b);
-MATCH (a:synset)-[r:SYNSET {linkid:12}]->(b:synset) MERGE (a)-[:PART_MERONYM]->(b);
-MATCH (a:synset)-[r:SYNSET {linkid:14}]->(b:synset) MERGE (a)-[:MEMBER_MERONYM]->(b);
-MATCH (a:synset)-[r:SYNSET {linkid:16}]->(b:synset) MERGE (a)-[:SUBSTANCE_MERONYM]->(b);
-```
-
----
-
-## Operational Tips
-
-- Treat everything under `stage/wordnet-<ver>/src/` as **immutable** once released.
-- Use a unique `ingest_batch` per load and attach it to all created/updated nodes/rels.
-- Keep **golden queries** (e.g., “horse” hypernyms) as smoke tests after each load.
-- For dynamic sources later, adopt CDC or timestamped incremental extracts—this static pipeline still applies, just version each batch.
-
----
-
-## License & Attribution
-
-- WordNet © Princeton University (see WordNet license).  
-- This repo includes **data manifests** and **loader scripts**; actual CSV licensing follows the upstream dataset.
+*Generated: 2025-11-04T19:02:16.816763+00:00*
