@@ -1,0 +1,873 @@
+{
+  "schema_version": "1.0",
+  "dataset": "wordnet",
+  "version": "3.0.1",
+  "encoding": "utf-8",
+  "csv": {
+    "delimiter": ",",
+    "quotechar": "\"",
+    "newline": "lf",
+    "has_header": true
+  },
+  "sources": [
+    {
+      "name": "synset",
+      "path": "synset.csv"
+    },
+    {
+      "name": "word",
+      "path": "word.csv"
+    },
+    {
+      "name": "sense",
+      "path": "sense.csv"
+    },
+    {
+      "name": "semlinkref",
+      "path": "semlinkref.csv"
+    },
+    {
+      "name": "linkdef",
+      "path": "linkdef.csv"
+    },
+    {
+      "name": "lexlinkref",
+      "path": "lexlinkref.csv"
+    },
+    {
+      "name": "vnclass",
+      "path": "vnclass.csv"
+    },
+    {
+      "name": "vnexampledef",
+      "path": "vnexampledef.csv"
+    },
+    {
+      "name": "vnexampleref",
+      "path": "vnexampleref.csv"
+    },
+    {
+      "name": "vnframedef",
+      "path": "vnframedef.csv"
+    },
+    {
+      "name": "vnframeref",
+      "path": "vnframeref.csv"
+    },
+    {
+      "name": "vnrole",
+      "path": "vnrole.csv"
+    },
+    {
+      "name": "vnroletype",
+      "path": "vnroletype.csv"
+    },
+    {
+      "name": "vnselrestr",
+      "path": "vnselrestr.csv"
+    },
+    {
+      "name": "vnselrestrs",
+      "path": "vnselrestrs.csv"
+    }
+  ],
+  "ingest_batch": {
+    "id_prefix": "wn-3.0.1-",
+    "attach_properties": {
+      "source_system": "wordnet",
+      "ingested_at": "@now_utc_iso8601"
+    }
+  },
+  "nodes": {
+    "synset": {
+      "source": "synset",
+      "label": "synset",
+      "key": [
+        "synsetid"
+      ],
+      "mappings": {
+        "synsetid": {
+          "column": "synsetid",
+          "type": "int"
+        },
+        "pos": {
+          "column": "pos",
+          "type": "string",
+          "transform": [
+            "trim",
+            "lower"
+          ]
+        },
+        "definition": {
+          "column": "definition",
+          "type": "string",
+          "transform": [
+            "trim"
+          ]
+        }
+      }
+    },
+    "word": {
+      "source": "word",
+      "label": "word",
+      "key": [
+        "wordid"
+      ],
+      "mappings": {
+        "wordid": {
+          "column": "wordid",
+          "type": "int"
+        },
+        "lemma": {
+          "column": "lemma",
+          "type": "string",
+          "transform": [
+            "trim",
+            "lower"
+          ]
+        }
+      }
+    },
+    "vn_class": {
+      "source": "vnclass",
+      "label": "vn_class",
+      "key": [
+        "classid"
+      ],
+      "mappings": {
+        "classid": {
+          "column": "classid",
+          "type": "int"
+        },
+        "class": {
+          "column": "class",
+          "type": "string",
+          "transform": [
+            "trim"
+          ]
+        }
+      }
+    },
+    "vn_frame": {
+      "source": "vnframedef",
+      "label": "vn_frame",
+      "key": [
+        "frameid"
+      ],
+      "mappings": {
+        "frameid": {
+          "column": "frameid",
+          "type": "int"
+        },
+        "number": {
+          "column": "number",
+          "type": "int",
+          "nullable": true
+        },
+        "xtag": {
+          "column": "xtag",
+          "type": "string",
+          "transform": [
+            "trim"
+          ],
+          "nullable": true
+        },
+        "description1": {
+          "column": "description1",
+          "type": "string",
+          "transform": [
+            "trim"
+          ],
+          "nullable": true
+        },
+        "description2": {
+          "column": "description2",
+          "type": "string",
+          "transform": [
+            "trim"
+          ],
+          "nullable": true
+        },
+        "syntax": {
+          "column": "syntax",
+          "type": "string",
+          "nullable": true
+        },
+        "semantics": {
+          "column": "semantics",
+          "type": "string",
+          "nullable": true
+        }
+      }
+    },
+    "vn_example": {
+      "source": "vnexampledef",
+      "label": "vn_example",
+      "key": [
+        "exampleid"
+      ],
+      "mappings": {
+        "exampleid": {
+          "column": "exampleid",
+          "type": "int"
+        },
+        "example": {
+          "column": "example",
+          "type": "string",
+          "transform": [
+            "trim"
+          ]
+        }
+      }
+    },
+    "vn_role": {
+      "source": "vnrole",
+      "label": "vn_role",
+      "key": [
+        "roleid"
+      ],
+      "mappings": {
+        "roleid": {
+          "column": "roleid",
+          "type": "int"
+        },
+        "wordid": {
+          "column": "wordid",
+          "type": "int",
+          "nullable": true
+        },
+        "synsetid": {
+          "column": "synsetid",
+          "type": "int",
+          "nullable": true
+        },
+        "classid": {
+          "column": "classid",
+          "type": "int",
+          "nullable": true
+        },
+        "rolesetid": {
+          "column": "rolesetid",
+          "type": "int",
+          "nullable": true
+        },
+        "roletypeid": {
+          "column": "roletypeid",
+          "type": "int",
+          "nullable": true
+        },
+        "selrestrsid": {
+          "column": "selrestrsid",
+          "type": "int",
+          "nullable": true
+        },
+        "quality": {
+          "column": "quality",
+          "type": "string",
+          "nullable": true
+        }
+      }
+    },
+    "vn_role_type": {
+      "source": "vnroletype",
+      "label": "vn_role_type",
+      "key": [
+        "roletypeid"
+      ],
+      "mappings": {
+        "roletypeid": {
+          "column": "roletypeid",
+          "type": "int"
+        },
+        "type": {
+          "column": "type",
+          "type": "string",
+          "transform": [
+            "trim"
+          ]
+        }
+      }
+    },
+    "vn_selrestr": {
+      "source": "vnselrestr",
+      "label": "vn_selrestr",
+      "key": [
+        "selrestrid"
+      ],
+      "mappings": {
+        "selrestrid": {
+          "column": "selrestrid",
+          "type": "int"
+        },
+        "value": {
+          "column": "value",
+          "type": "string",
+          "nullable": true
+        },
+        "type": {
+          "column": "type",
+          "type": "string",
+          "nullable": true
+        }
+      }
+    },
+    "vn_selrestrs": {
+      "source": "vnselrestrs",
+      "label": "vn_selrestrs",
+      "key": [
+        "selrestrsid"
+      ],
+      "mappings": {
+        "selrestrsid": {
+          "column": "selrestrsid",
+          "type": "int"
+        },
+        "selrestrs": {
+          "column": "selrestrs",
+          "type": "string"
+        }
+      }
+    }
+  },
+  "relationships": {
+    "membership_WORD": {
+      "source": "sense",
+      "type": "WORD",
+      "direction": "OUT",
+      "from": {
+        "label": "synset",
+        "match_on": [
+          "synsetid"
+        ]
+      },
+      "to": {
+        "label": "word",
+        "match_on": [
+          "wordid"
+        ]
+      },
+      "key": [
+        "synsetid",
+        "wordid"
+      ],
+      "properties": {
+        "rank": {
+          "column": "rank",
+          "type": "int",
+          "nullable": true
+        },
+        "lexid": {
+          "column": "lexid",
+          "type": "int",
+          "nullable": true
+        },
+        "tagcount": {
+          "column": "tagcount",
+          "type": "int",
+          "nullable": true
+        }
+      }
+    },
+    "semantic_SYNSET": {
+      "source": "semlinkref",
+      "type": "SYNSET",
+      "direction": "OUT",
+      "from": {
+        "label": "synset",
+        "match_on": [
+          "synset1id:synsetid"
+        ]
+      },
+      "to": {
+        "label": "synset",
+        "match_on": [
+          "synset2id:synsetid"
+        ]
+      },
+      "key": [
+        "synset1id",
+        "synset2id",
+        "linkid"
+      ],
+      "properties": {
+        "linkid": {
+          "column": "linkid",
+          "type": "int"
+        }
+      }
+    },
+    "lexical_LEXLINK": {
+      "source": "lexlinkref",
+      "type": "LEXLINK",
+      "direction": "OUT",
+      "from": {
+        "label": "word",
+        "match_on": [
+          "word1id:wordid"
+        ]
+      },
+      "to": {
+        "label": "word",
+        "match_on": [
+          "word2id:wordid"
+        ]
+      },
+      "key": [
+        "word1id",
+        "word2id",
+        "linkid"
+      ],
+      "properties": {
+        "linkid": {
+          "column": "linkid",
+          "type": "int"
+        },
+        "synset1id": {
+          "column": "synset1id",
+          "type": "int",
+          "nullable": true
+        },
+        "synset2id": {
+          "column": "synset2id",
+          "type": "int",
+          "nullable": true
+        }
+      }
+    },
+    "vn_frame_in_class": {
+      "source": "vnframeref",
+      "type": "VN_IN_CLASS",
+      "direction": "OUT",
+      "from": {
+        "label": "vn_frame",
+        "match_on": [
+          "frameid"
+        ]
+      },
+      "to": {
+        "label": "vn_class",
+        "match_on": [
+          "classid"
+        ]
+      },
+      "key": [
+        "frameid",
+        "classid"
+      ],
+      "properties": {
+        "quality": {
+          "column": "quality",
+          "type": "string",
+          "nullable": true
+        }
+      }
+    },
+    "vn_frame_has_example": {
+      "source": "vnexampleref",
+      "type": "HAS_EXAMPLE",
+      "direction": "OUT",
+      "from": {
+        "label": "vn_frame",
+        "match_on": [
+          "frameid"
+        ]
+      },
+      "to": {
+        "label": "vn_example",
+        "match_on": [
+          "exampleid"
+        ]
+      },
+      "key": [
+        "frameid",
+        "exampleid"
+      ]
+    },
+    "vn_word_has_frame": {
+      "source": "vnframeref",
+      "type": "VN_FRAME_REF",
+      "direction": "OUT",
+      "from": {
+        "label": "word",
+        "match_on": [
+          "wordid"
+        ]
+      },
+      "to": {
+        "label": "vn_frame",
+        "match_on": [
+          "frameid"
+        ]
+      },
+      "key": [
+        "wordid",
+        "frameid",
+        "classid"
+      ],
+      "properties": {
+        "classid": {
+          "column": "classid",
+          "type": "int",
+          "nullable": true
+        },
+        "quality": {
+          "column": "quality",
+          "type": "string",
+          "nullable": true
+        }
+      }
+    },
+    "vn_synset_has_frame": {
+      "source": "vnframeref",
+      "type": "VN_FRAME_REF",
+      "direction": "OUT",
+      "from": {
+        "label": "synset",
+        "match_on": [
+          "synsetid"
+        ]
+      },
+      "to": {
+        "label": "vn_frame",
+        "match_on": [
+          "frameid"
+        ]
+      },
+      "key": [
+        "synsetid",
+        "frameid",
+        "classid"
+      ],
+      "properties": {
+        "classid": {
+          "column": "classid",
+          "type": "int",
+          "nullable": true
+        },
+        "quality": {
+          "column": "quality",
+          "type": "string",
+          "nullable": true
+        }
+      }
+    },
+    "vn_class_has_role": {
+      "source": "vnrole",
+      "type": "HAS_ROLE",
+      "direction": "OUT",
+      "from": {
+        "label": "vn_class",
+        "match_on": [
+          "classid"
+        ]
+      },
+      "to": {
+        "label": "vn_role",
+        "match_on": [
+          "roleid"
+        ]
+      },
+      "key": [
+        "classid",
+        "roleid"
+      ]
+    },
+    "vn_role_has_type": {
+      "source": "vnrole",
+      "type": "ROLE_TYPE",
+      "direction": "OUT",
+      "from": {
+        "label": "vn_role",
+        "match_on": [
+          "roletypeid:roletypeid"
+        ]
+      },
+      "to": {
+        "label": "vn_role_type",
+        "match_on": [
+          "roletypeid"
+        ]
+      },
+      "key": [
+        "roleid",
+        "roletypeid"
+      ]
+    },
+    "vn_role_has_selrestrs": {
+      "source": "vnrole",
+      "type": "HAS_SELRESTRS",
+      "direction": "OUT",
+      "from": {
+        "label": "vn_role",
+        "match_on": [
+          "selrestrsid:selrestrsid"
+        ]
+      },
+      "to": {
+        "label": "vn_selrestrs",
+        "match_on": [
+          "selrestrsid"
+        ]
+      },
+      "key": [
+        "roleid",
+        "selrestrsid"
+      ]
+    }
+  },
+  "derived_relationships": {
+    "promote_named_edges": {
+      "from": "semantic_SYNSET",
+      "strategy": "by_linkid",
+      "map": [
+        {
+          "linkid": 1,
+          "type": "HYPERNYM"
+        },
+        {
+          "linkid": 2,
+          "type": "HYPONYM"
+        },
+        {
+          "linkid": 3,
+          "type": "INSTANCE_HYPERNYM"
+        },
+        {
+          "linkid": 4,
+          "type": "INSTANCE_HYPONYM"
+        },
+        {
+          "linkid": 12,
+          "type": "PART_MERONYM"
+        },
+        {
+          "linkid": 14,
+          "type": "MEMBER_MERONYM"
+        },
+        {
+          "linkid": 16,
+          "type": "SUBSTANCE_MERONYM"
+        }
+      ],
+      "deduplicate": true,
+      "retain_source_edge": true
+    },
+    "promote_named_lexical_edges": {
+      "from": "lexical_LEXLINK",
+      "strategy": "by_linkid",
+      "map": [
+        {
+          "linkid": 30,
+          "type": "ANTONYM"
+        },
+        {
+          "linkid": 40,
+          "type": "SIMILAR"
+        },
+        {
+          "linkid": 50,
+          "type": "ALSO_SEE"
+        },
+        {
+          "linkid": 60,
+          "type": "ATTRIBUTE"
+        },
+        {
+          "linkid": 70,
+          "type": "VERB_GROUP"
+        },
+        {
+          "linkid": 71,
+          "type": "PARTICIPLE"
+        },
+        {
+          "linkid": 80,
+          "type": "PERTAINYM"
+        },
+        {
+          "linkid": 81,
+          "type": "DERIVATION"
+        }
+      ],
+      "deduplicate": true,
+      "retain_source_edge": true
+    }
+  },
+  "validation": {
+    "graph_assertions": [
+      {
+        "cypher": "MATCH (s:synset) RETURN count(s) > 0 AS ok"
+      },
+      {
+        "cypher": "MATCH ()-[r:SYNSET]->() RETURN count(r) > 0 AS ok"
+      },
+      {
+        "cypher": "MATCH ()-[r:SYNSET]->() WHERE r.linkid IS NULL RETURN count(r)=0 AS ok"
+      },
+      {
+        "cypher": "MATCH (s:synset)-[:WORD]->(w:word) RETURN count(*) > 0 AS ok"
+      },
+      {
+        "cypher": "MATCH (c:vn_class) RETURN count(c) >= 0 AS ok"
+      },
+      {
+        "cypher": "MATCH (f:vn_frame) RETURN count(f) >= 0 AS ok"
+      },
+      {
+        "cypher": "MATCH (w:word)-[:VN_FRAME_REF]->(:vn_frame) RETURN count(*) >= 0 AS ok"
+      }
+    ]
+  },
+  "load_order": [
+    "nodes.synset",
+    "nodes.word",
+    "relationships.membership_WORD",
+    "relationships.semantic_SYNSET",
+    "derived_relationships.promote_named_edges",
+    "relationships.lexical_LEXLINK",
+    "derived_relationships.promote_named_lexical_edges",
+    "nodes.vn_class",
+    "nodes.vn_frame",
+    "nodes.vn_example",
+    "nodes.vn_role",
+    "nodes.vn_role_type",
+    "nodes.vn_selrestr",
+    "nodes.vn_selrestrs",
+    "relationships.vn_frame_in_class",
+    "relationships.vn_frame_has_example",
+    "relationships.vn_word_has_frame",
+    "relationships.vn_synset_has_frame",
+    "relationships.vn_class_has_role",
+    "relationships.vn_role_has_type",
+    "relationships.vn_role_has_selrestrs"
+  ],
+  "runtime": {
+    "neo4j_mode": "aura",
+    "batching": {
+      "load_csv": {
+        "periodic_commit": 10000
+      },
+      "merge": {
+        "use_unwind_batches_of": 10000
+      }
+    },
+    "indexes": [
+      {
+        "kind": "constraint",
+        "label": "synset",
+        "properties": [
+          "synsetid"
+        ],
+        "unique": true
+      },
+      {
+        "kind": "constraint",
+        "label": "word",
+        "properties": [
+          "wordid"
+        ],
+        "unique": true
+      },
+      {
+        "kind": "rel_index",
+        "type": "SYNSET",
+        "properties": [
+          "linkid"
+        ]
+      },
+      {
+        "kind": "rel_index",
+        "type": "LEXLINK",
+        "properties": [
+          "linkid"
+        ]
+      },
+      {
+        "kind": "constraint",
+        "label": "vn_class",
+        "properties": [
+          "classid"
+        ],
+        "unique": true
+      },
+      {
+        "kind": "constraint",
+        "label": "vn_frame",
+        "properties": [
+          "frameid"
+        ],
+        "unique": true
+      },
+      {
+        "kind": "constraint",
+        "label": "vn_example",
+        "properties": [
+          "exampleid"
+        ],
+        "unique": true
+      },
+      {
+        "kind": "constraint",
+        "label": "vn_role",
+        "properties": [
+          "roleid"
+        ],
+        "unique": true
+      },
+      {
+        "kind": "constraint",
+        "label": "vn_role_type",
+        "properties": [
+          "roletypeid"
+        ],
+        "unique": true
+      },
+      {
+        "kind": "constraint",
+        "label": "vn_selrestr",
+        "properties": [
+          "selrestrid"
+        ],
+        "unique": true
+      },
+      {
+        "kind": "constraint",
+        "label": "vn_selrestrs",
+        "properties": [
+          "selrestrsid"
+        ],
+        "unique": true
+      }
+    ],
+    "provenance": {
+      "attach_to_nodes": [
+        "synset",
+        "word",
+        "vn_class",
+        "vn_frame",
+        "vn_example",
+        "vn_role",
+        "vn_role_type",
+        "vn_selrestr",
+        "vn_selrestrs"
+      ],
+      "attach_to_rels": [
+        "membership_WORD",
+        "semantic_SYNSET",
+        "lexical_LEXLINK",
+        "vn_frame_in_class",
+        "vn_frame_has_example",
+        "vn_word_has_frame",
+        "vn_synset_has_frame",
+        "vn_class_has_role",
+        "vn_role_has_type",
+        "vn_role_has_selrestrs"
+      ],
+      "properties": [
+        "source_system",
+        "ingested_at",
+        "ingest_batch"
+      ]
+    }
+  }
+}
